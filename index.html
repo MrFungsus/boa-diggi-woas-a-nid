@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Salzburg Gebäudeanalyse</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+:root{--bg:#f6f7f4;--fg:#1d2b24;--ac:#2f6b4f;--mu:#6b7a72;--bd:#d5dbd6}
+@media(prefers-color-scheme:dark){:root{--bg:#161c19;--fg:#e6ece8;--ac:#7cc9a2;--mu:#93a39a;--bd:#2e3a34}}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{font:15px/1.5 Georgia,serif;background:var(--bg);color:var(--fg);display:flex}
+aside{width:360px;max-width:45%;padding:14px;overflow:auto;border-right:1px solid var(--bd)}
+#map{flex:1}h1{font-size:20px;margin:0 0 8px}h2{font-size:16px;margin:14px 0 4px}
+input,select{width:100%;padding:7px;font:inherit;background:var(--bg);color:var(--fg);border:1px solid var(--bd)}
+#res div{padding:5px 2px;cursor:pointer;border-bottom:1px solid var(--bd)}#res div:hover{color:var(--ac)}
+table{width:100%;border-collapse:collapse}td{padding:2px 0;border-bottom:1px solid var(--bd)}td:last-child{text-align:right}
+small{color:var(--mu);display:block;margin-top:8px}
+@media(max-width:700px){body{flex-direction:column}aside{width:100%;max-width:none;height:50%}}
+</style></head><body>
+<aside><h1>Gebäudeanalyse Salzburg</h1>
+<input id="q" placeholder="Straße, Hausnummer, PLZ oder Ort" autocomplete="off"><div id="res"></div>
+<div id="info"><small id="st">Lade Daten …</small></div></aside><div id="map"></div>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pmtiles@3.2.0/dist/pmtiles.js"></script>
+<script>
+const $=s=>document.querySelector(s),info=$("#info");
+const get=async u=>{try{const r=await fetch(u);return r.ok?await r.json():null}catch{return null}};
+const norm=s=>s.toLowerCase().replace(/ä/g,"ae").replace(/ö/g,"oe").replace(/ü/g,"ue").replace(/ß/g,"ss");
+const P=(c,o)=>[(c[0]-o[0])*111320*Math.cos(o[1]*Math.PI/180),(c[1]-o[1])*110540];
+const segD=(p,a,b)=>{const dx=b[0]-a[0],dy=b[1]-a[1],t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy||1)));return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy)};
+function nearest(fs,o,pt){let best=null;for(const f of fs){const g=f.geometry,c=g.coordinates;let d=1e18;
+if(pt)d=Math.hypot(...P(c,o));else for(let i=0;i<c.length-1;i++)d=Math.min(d,segD([0,0],P(c[i],o),P(c[i+1],o)));
+if(!best||d<best.d)best={d,f}}return best&&best.d<=2500?best:null}
+const W=[.55,.5,.5,.5,.55,.7,1,1.3,1.1,.9,.9,1,1.1,1,.9,.9,1,1.3,1.6,1.7,1.5,1.2,.9,.7],sw=W.reduce((a,b)=>a+b);
+const SEAS={Winter:1.25,Übergang:1,Sommer:.8};
+let LN={features:[]},ST={features:[]},A=[],cur=null;
+function render(o={}){const{pr,c}=cur,fl=pr.a,lv=+pr.g||2,h=+pr.h||lv*3,gesch=pr.h?Math.max(1,Math.round(h/3)):lv,wohn=pr.t==1;
+const nutz=o.nutz||fl*gesch*.8,pers=o.pers||nutz/45,kwh=wohn?pers*1890:nutz*120,season=o.season||"Übergang";
+const ln=nearest(LN.features,c),sn=nearest(ST.features,c,1),kwp=fl*.6/6;
+const kw=W.map(w=>kwh/8760*SEAS[season]*w*24/sw),mx=Math.max(...kw);
+const bars=kw.map((v,i)=>`<rect x="${i*13}" y="${50-v/mx*48}" width="11" height="${v/mx*48}" fill="var(--ac)"><title>${i}:00 · ${v.toFixed(2)} kW</title></rect>`).join("");
+info.innerHTML=`<h2>Gebäude</h2><table>
+<tr><td>Grundfläche (Polygon)</td><td>${fl.toFixed(0)} m²</td></tr>
+<tr><td>Länge × Breite (Hüllrechteck)</td><td>${pr.l} × ${pr.w} m</td></tr>
+<tr><td>Höhe${pr.h?"":" (Geschosse × 3 m)"}</td><td>${h.toFixed(1)} m</td></tr>
+<tr><td>Modellnutzfläche</td><td>${nutz.toFixed(0)} m²</td></tr>
+<tr><td>${wohn?"Angenommene Personen":"Ansatz Gewerbe"}</td><td>${wohn?pers.toFixed(1):"120 kWh/m²a"}</td></tr>
+<tr><td>Modellverbrauch</td><td>${kwh.toFixed(0)} kWh/a</td></tr>
+<tr><td>Mögliche PV (Dach × 0,6 ÷ 6 m²/kWp)</td><td>${kwp.toFixed(1)} kWp · ${(kwp*1000).toFixed(0)} kWh/a</td></tr>
+<tr><td>Nächste Leitung (≤ 2,5 km)</td><td>${ln?ln.d.toFixed(0)+" m":"keine"}</td></tr>
+<tr><td>Nächste Station</td><td>${sn?(sn.f.properties.name||"Station")+", "+sn.d.toFixed(0)+" m":"keine"}</td></tr></table>
+<h2>Eigene Annahmen</h2>
+<label>Nutzfläche m²<input id="in1" type="number" value="${nutz.toFixed(0)}"></label>
+<label>Personen<input id="in2" type="number" step=".5" value="${pers.toFixed(1)}"></label>
+<label>Saison<select id="in3">${Object.keys(SEAS).map(k=>`<option ${k==season?"selected":""}>${k}</option>`).join("")}</select></label>
+<h2>Tagesprofil (kW)</h2><svg viewBox="0 0 312 52" width="100%">${bars}</svg>
+<small>Modellannahmen, keine Messwerte und keine Bewohnerdaten. Leitung = geographisch nächste erfasste Leitung, kein Lastfluss. OSM kann Gebäude oder Netzdetails nicht vollständig enthalten.</small>`;
+const re=()=>render({nutz:+in1.value,pers:+in2.value,season:in3.value});
+in1.onchange=()=>{in2.value=(in1.value/45).toFixed(1);re()};in2.onchange=re;in3.onchange=re}
+function show(pr,c){cur={pr,c};map.setFilter("b-sel",["==",["get","i"],pr.i]);render()}
+const pm=new pmtiles.Protocol();maplibregl.addProtocol("pmtiles",pm.tile);
+const map=new maplibregl.Map({container:"map",center:[13.043,47.8],zoom:14,style:{version:8,
+sources:{osm:{type:"raster",tiles:["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png","https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],tileSize:256,maxzoom:19,attribution:"© OpenStreetMap-Mitwirkende (ODbL) · © CARTO · Adressen: BEV CC BY 4.0"}},
+layers:[{id:"osm",type:"raster",source:"osm"}]}});
+map.addControl(new maplibregl.NavigationControl());
+map.on("load",async()=>{
+const base=new URL("data/",location.href).href;
+const ok=await fetch(base+"buildings.pmtiles",{headers:{Range:"bytes=0-1"}}).then(r=>r.ok).catch(()=>false);
+const sl=ok?{"source-layer":"buildings"}:{};
+map.addSource("b",ok?{type:"vector",url:"pmtiles://"+base+"buildings.pmtiles"}:{type:"geojson",data:base+"buildings.geojson"});
+map.addLayer({id:"b-fill",type:"fill",source:"b",...sl,minzoom:14,paint:{"fill-color":"#2f6b4f","fill-opacity":.35,"fill-outline-color":"#2f6b4f"}});
+map.addLayer({id:"b-sel",type:"line",source:"b",...sl,minzoom:14,filter:["==",["get","i"],-1],paint:{"line-color":"#c0392b","line-width":3}});
+[LN,ST]=(await Promise.all([get(base+"lines.geojson"),get(base+"stations.geojson")])).map(x=>x||{features:[]});
+map.addSource("l",{type:"geojson",data:LN});map.addLayer({id:"l",type:"line",source:"l",paint:{"line-color":"#d68910","line-width":2}});
+map.addSource("s",{type:"geojson",data:ST});map.addLayer({id:"s",type:"circle",source:"s",paint:{"circle-color":"#8e44ad","circle-radius":6}});
+map.on("click","b-fill",e=>show(e.features[0].properties,[e.lngLat.lng,e.lngLat.lat]));
+map.on("mouseenter","b-fill",()=>map.getCanvas().style.cursor="pointer");map.on("mouseleave","b-fill",()=>map.getCanvas().style.cursor="");
+A=((await get(base+"addresses.json"))||[]).map(a=>({s:a[0],p:a[1],o:a[2],lat:a[3],lon:a[4],b:a[5],k:norm(`${a[0]} ${a[1]} ${a[2]}`)}));
+$("#st").textContent=`${ok?"PMTiles":"GeoJSON"}-Gebäude, ${A.length} Adressen geladen. Gebäude ab Zoom 14 anklicken oder Adresse suchen.`});
+q.oninput=()=>{const t=norm(q.value.trim()).split(/\s+/).filter(Boolean);res.innerHTML="";if(!t.length)return;
+A.filter(a=>t.every(x=>a.k.includes(x))).slice(0,8).forEach(a=>{const d=document.createElement("div");d.textContent=`${a.s}, ${a.p} ${a.o}`;d.onclick=()=>pick(a);res.append(d)})};
+let mk;function pick(a){res.innerHTML="";mk&&mk.remove();map.jumpTo({center:[a.lon,a.lat],zoom:18});
+map.once("idle",()=>{const hit=a.b>=0&&map.queryRenderedFeatures({layers:["b-fill"]}).find(f=>f.properties.i==a.b);
+if(hit)show(hit.properties,[a.lon,a.lat]);else{mk=new maplibregl.Marker().setLngLat([a.lon,a.lat]).addTo(map);
+info.innerHTML="<small>Kein eindeutiger Gebäudegrundriss zum Adresspunkt. Bitte Gebäude auf der Karte anklicken.</small>"}})}
+</script></body></html>

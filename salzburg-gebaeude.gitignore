@@ -1,0 +1,4 @@
+   *.osm.pbf
+   bev/
+   landesgrenze_salzburg.geojson
+   data/buildings.geojson
