@@ -58,7 +58,7 @@ in1.onchange=()=>{in2.value=(in1.value/45).toFixed(1);re()};in2.onchange=re;in3.
 function show(pr,c){cur={pr,c};map.setFilter("b-sel",["==",["get","i"],pr.i]);render()}
 const pm=new pmtiles.Protocol();maplibregl.addProtocol("pmtiles",pm.tile);
 const map=new maplibregl.Map({container:"map",center:[13.043,47.8],zoom:14,style:{version:8,
-sources:{osm:{type:"raster",tiles:["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png","https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],tileSize:256,maxzoom:19,attribution:"© OpenStreetMap-Mitwirkende (ODbL) · © CARTO · Adressen: BEV CC BY 4.0"}},
+sources:{osm:{type:"raster",tiles:["https://mapsneu.wien.gv.at/basemap/geolandbasemap/normal/google3857/{z}/{y}/{x}.png"],tileSize:256,maxzoom:19,attribution:"Grundkarte: basemap.at (CC BY 4.0) · Adressen: BEV CC BY 4.0"}},
 layers:[{id:"osm",type:"raster",source:"osm"}]}});
 map.addControl(new maplibregl.NavigationControl());
 map.on("load",async()=>{
